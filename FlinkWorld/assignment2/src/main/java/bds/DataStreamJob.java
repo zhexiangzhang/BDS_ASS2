@@ -63,12 +63,12 @@ public class DataStreamJob
 		ProcessStreamFromFiles(dataPath + "SampleDataSet/OutOfOrderStream/");
 		System.out.println("Finish query with SampleDataSet + OutOfOrderStream");
 		
-//		ProcessStreamFromFiles(dataPath + "DataSet/InOrderStream/");
-//		System.out.println("Finish query with DataSet + InOrderStream");
-//
-//		ProcessStreamFromFiles(dataPath + "DataSet/OutOfOrderStream/");
-//		System.out.println("Finish query with DataSet + OutOfOrderStream");
-//
+		ProcessStreamFromFiles(dataPath + "DataSet/InOrderStream/");
+		System.out.println("Finish query with DataSet + InOrderStream");
+
+		ProcessStreamFromFiles(dataPath + "DataSet/OutOfOrderStream/");
+		System.out.println("Finish query with DataSet + OutOfOrderStream");
+
 		//ProcessStreamFromKafka();
 		//System.out.println("Finish query with kafka stream");
 		
@@ -82,7 +82,7 @@ public class DataStreamJob
 		return tagStream
 				.map(e -> 
 				{
-					System.out.println("Receive tag event: <" + e.f0 + ", " + e.f1 + ", " + e.f2 + ">");
+//					System.out.println("Receive tag event: <" + e.f0 + ", " + e.f1 + ", " + e.f2 + ">");
 					return Tuple3.of(e.f0, e.f1, e.f2);
 				})
 				.returns(Types.TUPLE(Types.LONG, Types.INT, Types.INT))
@@ -91,33 +91,26 @@ public class DataStreamJob
 			    // ** STEP 1: do window join
 				// https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/joining/#window-join
 				.join(likeStream)
-				// use KeySelectorForJoinedEvent to select the key for the join
-				.where(tagEvent -> tagEvent.f1)
-				.equalTo(likeEvent -> likeEvent.f2)
+				.where(new KeySelectorForTagEvent())
+				.equalTo(new KeySelectorForLikeEvent())
 				.window(SlidingEventTimeWindows.of(windowLength, windowSlide))
 				.apply(new JoinTagAndLikeEvents())
-				.map(e ->
-				{
-					System.out.println("Receive joined event: <" + e.f0 + ", " + e.f1 + ", " + e.f2 + ", " + e.f3 + ">");
-					return Tuple4.of(e.f0, e.f1, e.f2, e.f3);
-				})
-				.returns(Types.TUPLE(Types.LONG, Types.LONG, Types.INT, Types.INT))
 			    // ** STEP 2: do filter
 			    // https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/overview/#filter
 				.filter(e -> e.f0 < e.f1)
                 // ** STEP 3: map the event to a different format, so to get prepared for the next step
-		        // https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/overview/#map
+//		        // https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/overview/#map
 				.map(value -> new Tuple2<>(value.f2, 1))
 				.returns(Types.TUPLE(Types.INT, Types.INT))
-		        // ** STEP 4: do window aggregate
-		        // https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/windows/#aggregatefunction
+//		        // ** STEP 4: do window aggregate
+//		        // https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/datastream/operators/windows/#aggregatefunction
 				.keyBy(0)
 				.window(SlidingEventTimeWindows.of(windowSlide, windowSlide))
 				.sum(1)
-		        // ** STEP 5: map the event to a format, so it is easier to print
+//		        // ** STEP 5: map the event to a format, so it is easier to print
 		        .map(e ->
 		        {
-		        	System.out.println("output: <" + e.f0 + ", " + e.f1 + ">");
+//		        	System.out.println("output: <" + e.f0 + ", " + e.f1 + ">");
 		        	return e.f0 + " " + e.f1;
 		        })
 		        .returns(Types.STRING);
@@ -158,7 +151,9 @@ public class DataStreamJob
 	     
 		// Execute program, beginning computation.
 		env.execute("Process stream from files");
-		
+
+		System.out.println("FlinkResult is generated in " + dataDirectory + "FlinkResult/");
+
 		CheckCorrectness(dataDirectory);
 	}
 	
@@ -298,3 +293,26 @@ public class DataStreamJob
         System.out.println("The query result is corret. ");
 	}
 }
+
+//	Receive filter event: (Time 1000< 3000, tag photoID 1,tag userID 3
+//		Receive filter event: (Time 12000< 13000, tag photoID 3,tag userID 2
+//		Receive filter event: (Time 2000< 3000, tag photoID 1,tag userID 2
+//		Receive filter event: (Time 1000< 3000, tag photoID 1,tag userID 3
+//		Receive filter event: (Time 12000< 13000, tag photoID 3,tag userID 2
+//		Receive filter event: (Time 2000< 3000, tag photoID 1,tag userID 2
+//		Receive filter event: (Time 12000< 13000, tag photoID 3,tag userID 2
+//		Receive filter event: (Time 12000< 23000, tag photoID 3,tag userID 2
+//		Receive filter event: (Time 14000< 23000, tag photoID 3,tag userID 4
+//		Receive filter event: (Time 17000< 22000, tag photoID 2,tag userID 2
+//		Receive filter event: (Time 17000< 22000, tag photoID 2,tag userID 4
+//		Receive filter event: (Time 8000< 11000, tag photoID 1,tag userID 4
+//		Receive filter event: (Time 17000< 22000, tag photoID 2,tag userID 2
+//		Receive filter event: (Time 1000< 11000, tag photoID 1,tag userID 3
+//		Receive filter event: (Time 17000< 22000, tag photoID 2,tag userID 4
+//		Receive filter event: (Time 1000< 3000, tag photoID 1,tag userID 3
+//		Receive filter event: (Time 4000< 11000, tag photoID 1,tag userID 1
+//		Receive filter event: (Time 2000< 11000, tag photoID 1,tag userID 2
+//		Receive filter event: (Time 2000< 3000, tag photoID 1,tag userID 2
+//		Receive filter event: (Time 8000< 17000, tag photoID 1,tag userID 4
+//		Receive filter event: (Time 8000< 11000, tag photoID 1,tag userID 4
+//		Receive filter event: (Time 8000< 16000, tag photoID 1,tag userID 4
